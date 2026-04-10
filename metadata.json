@@ -1,8 +1,4 @@
-{
-  "name": "Specchio Magico",
-  "description": "Een magische Italiaanse taalspiegel voor shadowing en conversatie met AI.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone"
-  ]
-}
+export const metadata = {
+  title: "Specchio Magico",
+  description: "Impara il tedesco con il tuo specchio magico",
+};
