@@ -450,7 +450,7 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-      <GuidaSection accentColor="#c9a84c" />  // goud
+      <GuidaSection accentColor="#c9a84c" /> 
     </div>
   );
 }
