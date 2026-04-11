@@ -241,7 +241,15 @@ export default function App() {
             className="font-serif text-3xl font-light tracking-widest text-[#e8c97a] drop-shadow-[0_0_20px_rgba(201,168,76,0.3)]"
           >
             Specchio Magico
+    
           </motion.h1>
+          <a
+  href="#guida"
+  className="text-[0.55rem] tracking-[0.15em] uppercase opacity-40 hover:opacity-80 transition-opacity mt-1 block"
+  style={{ color: 'inherit' }}
+>
+  Come iniziare · Hoe te beginnen · How to start ↓
+</a>
           <p className="text-[0.6rem] tracking-[0.2em] uppercase text-[#c9a84c]/50 mt-1">
             Il tuo partner tedesco
           </p>
@@ -442,6 +450,8 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      <GuidaSection accentColor="#c9a84c" />  // goud
+<GuidaSection accentColor="#
     </div>
   );
 }
