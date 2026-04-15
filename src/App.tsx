@@ -28,7 +28,6 @@ interface Message {
   role: 'user' | 'model';
   de: string;
   it: string;
-  ph?: string;
   score?: number;
   heard?: string;
 }
@@ -105,16 +104,25 @@ export default function App() {
     }
   };
 
+  // ✅ FIX 1: Alleen de Duitse tekst meegeven, geen Engelse instructie.
+  // ✅ FIX 2: speechConfig met een echte Duitse stem (Kore) toegevoegd.
   const speakIt = async (text: string) => {
     if (!text) return;
     setIsSpeaking(true);
-    setStatus('Lo specchio parla... · Der Spiegel spricht...');
+    setStatus('Der Spiegel spricht...');
     try {
       const aiInstance = getAI();
       const response = await aiInstance.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: `Say clearly in German: ${text}` }] }],
-        config: { responseModalities: [Modality.AUDIO] },
+        contents: [{ parts: [{ text }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: "Kore" }
+            }
+          }
+        },
       });
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio) {
@@ -133,36 +141,37 @@ export default function App() {
         const source = audioContextRef.current.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(audioContextRef.current.destination);
-        source.onended = () => { setIsSpeaking(false); setStatus('Premi 🎤 per rispondere'); };
+        source.onended = () => { setIsSpeaking(false); setStatus('Druk op 🎤 om te antwoorden · Drücke 🎤 zum Antworten'); };
         source.start();
       } else {
         throw new Error("No audio data received");
       }
     } catch (err) {
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'de-DE'; utterance.rate = 0.85;
+      utterance.lang = 'de-DE';
+      utterance.rate = 0.85;
       utterance.onend = () => setIsSpeaking(false);
       window.speechSynthesis.speak(utterance);
-      setStatus('Voce del browser utilizzata (fallback)');
+      setStatus('Browser stem gebruikt (fallback)');
     }
   };
 
   const startRecording = () => {
     try {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) { setStatus('Riconoscimento vocale non supportato.'); return; }
+      if (!SpeechRecognition) { setStatus('Spraakherkenning niet ondersteund.'); return; }
       if (window.speechSynthesis) window.speechSynthesis.cancel();
       if (recognitionRef.current) { try { recognitionRef.current.stop(); } catch(e) {} }
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.lang = 'de-DE';
       recognitionRef.current.continuous = false;
       recognitionRef.current.interimResults = false;
-      recognitionRef.current.onstart = () => { setIsRecording(true); setStatus('Ascolto... · Ich höre zu...'); };
+      recognitionRef.current.onstart = () => { setIsRecording(true); setStatus('Luisteren... · Ich höre zu...'); };
       recognitionRef.current.onresult = (event: any) => { setIsRecording(false); processHeard(event.results[0][0].transcript); };
-      recognitionRef.current.onerror = () => { setIsRecording(false); setStatus('Errore microfono.'); };
+      recognitionRef.current.onerror = () => { setIsRecording(false); setStatus('Microfoon fout.'); };
       recognitionRef.current.onend = () => { setIsRecording(false); };
       recognitionRef.current.start();
-    } catch (err: any) { setStatus('Impossibile avviare il microfono.'); setIsRecording(false); }
+    } catch (err: any) { setStatus('Microfoon kan niet starten.'); setIsRecording(false); }
   };
 
   const stopRecording = () => { recognitionRef.current?.stop(); setIsRecording(false); };
@@ -189,33 +198,36 @@ export default function App() {
     return 0.5;
   };
 
+  // ✅ FIX 3: Systeemprompt in het Duits, geen 'ph' (fonetiek) meer in het JSON.
   const generateAIResponse = async (history: Message[]) => {
     setIsThinking(true);
-    setStatus('Lo specchio pensa... · Der Spiegel denkt nach...');
-    const systemPrompt = `Sei un simpatico partner di conversazione in tedesco — come uno specchio magico che parla.
-    Livello: ${level}. Argomento attuale: ${topic}.
-    REGOLE: UNA frase breve in tedesco per turno (max 12 parole). Termina sempre con una domanda. RISPONDI SOLO con JSON valido: {"de":"frase in tedesco","it":"traduzione italiana","ph":"fonetica"}`;
+    setStatus('Der Spiegel denkt nach...');
+    const systemPrompt = `Du bist ein freundlicher Gesprächspartner auf Deutsch — wie ein Zauberspiegel.
+Niveau: ${level}. Aktuelles Thema: ${topic}.
+REGELN: Nur ein kurzer Satz auf Deutsch pro Antwort (max. 12 Wörter). Stelle immer eine Frage am Ende.
+Antworte NUR mit gültigem JSON, ohne Erklärungen oder Markdown: {"de":"deutscher Satz","it":"traduzione italiana"}`;
 
     const contents = history.map(m => ({
       role: m.role === 'user' ? 'user' : 'model',
-      parts: [{ text: m.role === 'user' ? m.de : JSON.stringify({ de: m.de, it: m.it, ph: m.ph }) }]
+      parts: [{ text: m.role === 'user' ? m.de : JSON.stringify({ de: m.de, it: m.it }) }]
     }));
 
     try {
       const aiInstance = getAI();
       const response = await aiInstance.models.generateContent({
         model: "gemini-2.5-flash",
-        contents: contents.length > 0 ? contents : [{ role: 'user', parts: [{ text: 'Inizia la conversazione.' }] }],
+        contents: contents.length > 0 ? contents : [{ role: 'user', parts: [{ text: 'Beginne das Gespräch.' }] }],
         config: { systemInstruction: systemPrompt, responseMimeType: "application/json" },
       });
       const data = JSON.parse(response.text || "{}");
-      const aiMsg: Message = { role: 'model', de: data.de || "Hallo!", it: data.it || "Ciao!", ph: data.ph || "" };
+      // ✅ FIX 4: Geen 'ph' meer in het Message object.
+      const aiMsg: Message = { role: 'model', de: data.de || "Hallo!", it: data.it || "Ciao!" };
       setMessages(prev => [...prev, aiMsg]);
       setIsThinking(false);
       speakIt(aiMsg.de);
     } catch (err) {
       setIsThinking(false);
-      setStatus('Ops, lo specchio è appannato.');
+      setStatus('Oeps, de spiegel is beslagen.');
     }
   };
 
@@ -223,10 +235,10 @@ export default function App() {
 
   const downloadTranscript = () => {
     if (messages.length === 0) return;
-    const transcript = messages.map(m => `[${m.role === 'user' ? 'TU' : 'SPECCHIO'}]\nDE: ${m.de}\nIT: ${m.it || '-'}\n`).join('\n---\n\n');
+    const transcript = messages.map(m => `[${m.role === 'user' ? 'JIJ' : 'SPIEGEL'}]\nDE: ${m.de}\nIT: ${m.it || '-'}\n`).join('\n---\n\n');
     const blob = new Blob([transcript], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `conversazione.txt`;
+    const a = document.createElement('a'); a.href = url; a.download = `gesprek.txt`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
@@ -241,15 +253,14 @@ export default function App() {
             className="font-serif text-3xl font-light tracking-widest text-[#e8c97a] drop-shadow-[0_0_20px_rgba(201,168,76,0.3)]"
           >
             Specchio Magico
-    
           </motion.h1>
           <a
-  href="#guida"
-  className="text-[0.55rem] tracking-[0.15em] uppercase opacity-40 hover:opacity-80 transition-opacity mt-1 block"
-  style={{ color: 'inherit' }}
->
-  Come iniziare · Hoe te beginnen · How to start ↓
-</a>
+            href="#guida"
+            className="text-[0.55rem] tracking-[0.15em] uppercase opacity-40 hover:opacity-80 transition-opacity mt-1 block"
+            style={{ color: 'inherit' }}
+          >
+            Come iniziare · Hoe te beginnen · How to start ↓
+          </a>
           <p className="text-[0.6rem] tracking-[0.2em] uppercase text-[#c9a84c]/50 mt-1">
             Il tuo partner tedesco
           </p>
@@ -345,7 +356,7 @@ export default function App() {
               {isRecording ? <MicOff size={24} className="text-red-500" /> : <Mic size={24} className="text-[#080810]" />}
             </button>
             <span className={`text-[0.55rem] uppercase tracking-widest font-bold text-center leading-tight ${isRecording ? 'text-red-500' : 'text-[#c9a84c]'}`}>
-              {isRecording ? <>Ascolto...<br/><span className="opacity-60">Zuhören</span></> : <>Rispondi<br/><span className="opacity-60">Antworten</span></>}
+              {isRecording ? <>Luisteren...<br/><span className="opacity-60">Zuhören</span></> : <>Rispondi<br/><span className="opacity-60">Antworten</span></>}
             </span>
           </div>
 
@@ -373,16 +384,16 @@ export default function App() {
               <div className={`max-w-[90%] px-3 py-2 rounded-xl text-[0.8rem] leading-relaxed ${msg.role === 'user' ? 'bg-white/5 border border-white/10 rounded-br-none italic text-white/80' : 'bg-gradient-to-br from-[#c9a84c]/10 to-[#c9a84c]/5 border border-[#c9a84c]/20 rounded-bl-none'}`}>
                 {msg.role === 'model' ? (
                   <>
+                    {/* ✅ FIX 5: Alleen de Duitse zin en Italiaanse vertaling tonen. Geen fonetiek meer. */}
                     <span className="font-serif italic text-base text-[#e8c97a] block mb-0.5">{msg.de}</span>
                     <span className="text-[0.65rem] text-white/40 block leading-tight">{msg.it}</span>
-                    {msg.ph && <span className="text-[0.6rem] text-[#c9a84c]/50 italic block mt-1">/{msg.ph}/</span>}
                   </>
                 ) : (
                   <>
                     <span>{msg.de}</span>
                     {msg.score !== undefined && (
                       <div className={`mt-1.5 text-[0.55rem] font-bold uppercase px-1.5 py-0.5 rounded-sm inline-block ${msg.score === 2 ? 'bg-green-500/10 text-green-400' : msg.score === 1 ? 'bg-yellow-500/10 text-yellow-400' : 'bg-red-500/10 text-red-400'}`}>
-                        {msg.score === 2 ? '✓ Ottimo!' : msg.score === 1 ? '~ Quasi!' : '↻ Riprova'}
+                        {msg.score === 2 ? '✓ Ottimo!' : msg.score === 1 ? '~ Bijna!' : '↻ Probeer opnieuw'}
                       </div>
                     )}
                   </>
@@ -450,19 +461,19 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-      <GuidaSection accentColor="#c9a84c" /> 
+      <GuidaSection accentColor="#c9a84c" />
       <div style={{
-  textAlign: 'center',
-  padding: '1.5rem 1rem 2rem',
-  fontSize: '0.72rem',
-  lineHeight: 1.8,
-  color: 'white',
-  opacity: 0.85,
-}}>
-  🇮🇹 Questa app è gratuita. Se la usi spesso, ti consigliamo di creare la tua chiave API personale — è facile e gratuita su aistudio.google.com.<br /><br />
-  🇳🇱 Deze app is gratis. Gebruik je hem regelmatig, maak dan je eigen API-sleutel aan — eenvoudig en gratis via aistudio.google.com.<br /><br />
-  🇬🇧 This app is free to use. If you use it regularly, we recommend creating your own API key — quick and free at aistudio.google.com.
-</div>
+        textAlign: 'center',
+        padding: '1.5rem 1rem 2rem',
+        fontSize: '0.72rem',
+        lineHeight: 1.8,
+        color: 'white',
+        opacity: 0.85,
+      }}>
+        🇮🇹 Questa app è gratuita. Se la usi spesso, ti consigliamo di creare la tua chiave API personale — è facile e gratuita su aistudio.google.com.<br /><br />
+        🇳🇱 Deze app is gratis. Gebruik je hem regelmatig, maak dan je eigen API-sleutel aan — eenvoudig en gratis via aistudio.google.com.<br /><br />
+        🇬🇧 This app is free to use. If you use it regularly, we recommend creating your own API key — quick and free at aistudio.google.com.
+      </div>
     </div>
   );
 }
