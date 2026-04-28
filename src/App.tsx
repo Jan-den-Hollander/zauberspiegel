@@ -432,7 +432,8 @@ Antworte NUR mit gültigem JSON, ohne Erklärungen oder Markdown: {"de":"deutsch
         </div>
 
         {/* Chat */}
-        <div className="w-full h-[35vh] min-h-[250px] bg-black/30 border border-[#c9a84c]/10 rounded-xl overflow-y-auto p-3 space-y-3 scrollbar-thin mb-4">
+        <div className="w-full h-[35vh] min-h-[250px] bg-black/30 border border-[#c9a84c]/10 rounded-xl overflow-y-auto p-3 flex flex-col-reverse gap-3 scrollbar-thin mb-4">
+<div ref={chatEndRef} />
 
           {messages.map((msg, i) => {
 
@@ -526,7 +527,7 @@ Antworte NUR mit gültigem JSON, ohne Erklärungen oder Markdown: {"de":"deutsch
               <div className="w-1 h-1 bg-[#c9a84c] rounded-full animate-bounce [animation-delay:0.4s]" />
             </div>
           )}
-          <div ref={chatEndRef} />
+         
         </div>
 
         {/* Onderaan */}
@@ -594,4 +595,4 @@ Antworte NUR mit gültigem JSON, ohne Erklärungen oder Markdown: {"de":"deutsch
       </div>
     </div>
   );
-}
+        }
